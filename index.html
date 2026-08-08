@@ -1,0 +1,1068 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, user-scalable=no">
+<title>Nassau Ledger</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=Roboto+Slab:wght@500;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --paper:#EDE8DC;
+    --card:#F7F4EA;
+    --ink:#1F3A2E;
+    --ink-soft:#4C5F52;
+    --fairway:#7C8B6F;
+    --flag:#B23A2E;
+    --flag-soft:#D98A7C;
+    --line:#CFC5A8;
+    --line-soft:#E1D9C2;
+    --gold:#A98A3C;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:var(--paper);
+    background-image:
+      repeating-linear-gradient(0deg, rgba(31,58,46,0.035) 0px, rgba(31,58,46,0.035) 1px, transparent 1px, transparent 28px);
+    color:var(--ink);
+    font-family:'Inter', sans-serif;
+    min-height:100vh;
+    padding-bottom:64px;
+  }
+  .wrap{max-width:560px;margin:0 auto;padding:20px 16px 40px;}
+
+  header.top{
+    display:flex;align-items:baseline;justify-content:space-between;
+    padding:4px 2px 18px;border-bottom:2px solid var(--ink);margin-bottom:20px;
+  }
+  header.top h1{
+    font-family:'Roboto Slab', serif;
+    font-weight:700;
+    font-size:1.5rem;
+    letter-spacing:-0.01em;
+    margin:0;
+  }
+  header.top .sub{
+    font-family:'IBM Plex Mono', monospace;
+    font-size:0.72rem;
+    text-transform:uppercase;
+    letter-spacing:0.08em;
+    color:var(--ink-soft);
+  }
+  .newmatch{
+    font-family:'IBM Plex Mono', monospace;
+    font-size:0.68rem;
+    text-transform:uppercase;
+    letter-spacing:0.06em;
+    color:var(--ink-soft);
+    background:none;border:1px solid var(--line);border-radius:3px;
+    padding:5px 9px;cursor:pointer;
+  }
+  .newmatch:active{background:var(--line-soft);}
+
+  /* ---------- Setup ---------- */
+  .card{
+    background:var(--card);
+    border:1px solid var(--line);
+    border-radius:6px;
+    padding:18px 16px;
+    margin-bottom:16px;
+  }
+  .card h2{
+    font-family:'Roboto Slab', serif;
+    font-size:0.95rem;
+    margin:0 0 14px;
+    padding-bottom:8px;
+    border-bottom:1px solid var(--line-soft);
+  }
+  .card h3{
+    font-family:'IBM Plex Mono', monospace;
+    font-size:0.7rem;
+    text-transform:uppercase;
+    letter-spacing:0.07em;
+    color:var(--ink-soft);
+    margin:18px 0 10px;
+  }
+  label.field{display:block;margin-bottom:12px;}
+  label.field span{
+    display:block;font-family:'IBM Plex Mono',monospace;
+    font-size:0.68rem;text-transform:uppercase;letter-spacing:0.06em;
+    color:var(--ink-soft);margin-bottom:5px;
+  }
+  input[type=text], input[type=number], select{
+    width:100%;
+    font-family:'IBM Plex Mono', monospace;
+    font-size:1rem;
+    padding:9px 10px;
+    border:1px solid var(--line);
+    border-radius:4px;
+    background:#fff;
+    color:var(--ink);
+    appearance:none;
+    -webkit-appearance:none;
+  }
+  select{background-image:linear-gradient(45deg,transparent 50%,var(--ink) 50%),linear-gradient(135deg,var(--ink) 50%,transparent 50%);
+    background-position:calc(100% - 16px) center, calc(100% - 11px) center;
+    background-size:5px 5px,5px 5px;background-repeat:no-repeat;}
+  input:focus, select:focus{outline:2px solid var(--fairway);outline-offset:1px;}
+  .row2{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+  .row3{display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:10px;}
+  .checkline{
+    display:flex;align-items:center;gap:8px;
+    font-size:0.85rem;color:var(--ink-soft);margin-top:6px;
+  }
+  .checkline input{width:16px;height:16px;flex-shrink:0;}
+
+  .segmented{
+    display:flex;border:1px solid var(--ink);border-radius:5px;overflow:hidden;margin-bottom:16px;
+  }
+  .segmented button{
+    flex:1;padding:10px;background:var(--card);border:none;cursor:pointer;
+    font-family:'IBM Plex Mono',monospace;font-size:0.78rem;font-weight:600;
+    text-transform:uppercase;letter-spacing:0.04em;color:var(--ink-soft);
+    border-right:1px solid var(--ink);
+  }
+  .segmented button:last-child{border-right:none;}
+  .segmented button.active{background:var(--ink);color:var(--card);}
+
+  .team-block{
+    border:1px solid var(--line-soft);border-radius:5px;padding:12px;margin-bottom:12px;
+  }
+  .team-block .team-title{
+    font-family:'IBM Plex Mono',monospace;font-size:0.66rem;text-transform:uppercase;
+    letter-spacing:0.06em;color:var(--fairway);margin-bottom:8px;font-weight:600;
+  }
+
+  .btn-primary{
+    width:100%;
+    background:var(--ink);
+    color:var(--card);
+    border:none;
+    font-family:'Roboto Slab', serif;
+    font-weight:700;
+    font-size:0.95rem;
+    letter-spacing:0.01em;
+    padding:13px;
+    border-radius:5px;
+    cursor:pointer;
+    margin-top:6px;
+  }
+  .btn-primary:active{background:var(--fairway);}
+  .btn-secondary{
+    width:100%;background:none;color:var(--ink-soft);
+    border:1px solid var(--line);font-family:'IBM Plex Mono',monospace;
+    font-size:0.75rem;padding:9px;border-radius:5px;cursor:pointer;margin-top:8px;
+  }
+
+  /* ---------- Status board ---------- */
+  .board{
+    background:var(--card);
+    border:1px solid var(--line);
+    border-radius:6px;
+    padding:14px 14px 6px;
+    margin-bottom:16px;
+  }
+  .thread{
+    border-top:1px solid var(--line-soft);
+    padding:10px 0;
+  }
+  .thread:first-child{border-top:none;}
+  .thread-row{
+    display:flex;align-items:center;justify-content:space-between;
+    gap:10px;
+  }
+  .thread-name{
+    font-family:'IBM Plex Mono', monospace;
+    font-size:0.72rem;text-transform:uppercase;letter-spacing:0.06em;
+    color:var(--ink-soft);
+  }
+  .thread-status{
+    font-family:'Roboto Slab', serif;
+    font-weight:700;
+    font-size:1.05rem;
+    text-align:right;
+  }
+  .thread-status.up-a{color:var(--ink);}
+  .thread-status.up-b{color:var(--flag);}
+  .thread-status.square{color:var(--ink-soft);font-weight:500;}
+
+  .press-child{
+    margin:8px 0 2px 16px;
+    padding:8px 10px;
+    border-left:2px solid var(--flag-soft);
+    background:rgba(178,58,46,0.05);
+    border-radius:0 4px 4px 0;
+    animation:stampIn 0.35s ease-out;
+  }
+  @keyframes stampIn{
+    0%{opacity:0;transform:translateX(-6px) rotate(-2deg) scale(0.96);}
+    60%{opacity:1;transform:translateX(1px) rotate(0.5deg) scale(1.02);}
+    100%{opacity:1;transform:translateX(0) rotate(0) scale(1);}
+  }
+  .press-tag{
+    display:inline-block;
+    font-family:'IBM Plex Mono',monospace;
+    font-size:0.62rem;
+    font-weight:700;
+    letter-spacing:0.08em;
+    color:var(--flag);
+    border:1.5px solid var(--flag);
+    border-radius:3px;
+    padding:1px 5px;
+    transform:rotate(-2deg);
+    margin-right:6px;
+  }
+
+  /* ---------- Hole entry ---------- */
+  .hole-nav{
+    display:flex;align-items:center;justify-content:space-between;
+    margin-bottom:12px;
+  }
+  .hole-nav button{
+    background:var(--card);border:1px solid var(--line);
+    color:var(--ink);font-size:1.1rem;
+    width:38px;height:38px;border-radius:50%;
+    cursor:pointer;
+  }
+  .hole-nav button:disabled{opacity:0.3;}
+  .hole-title{
+    font-family:'Roboto Slab', serif;font-weight:700;font-size:1.3rem;
+    text-align:center;
+  }
+  .hole-title small{
+    display:block;font-family:'IBM Plex Mono',monospace;
+    font-size:0.65rem;color:var(--ink-soft);font-weight:400;
+    text-transform:uppercase;letter-spacing:0.08em;margin-top:2px;
+  }
+
+  .sides-entry{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:6px;}
+  .side-col{
+    background:var(--card);border:1px solid var(--line);border-radius:6px;
+    padding:10px;
+  }
+  .side-col .side-label{
+    font-family:'IBM Plex Mono',monospace;font-size:0.68rem;
+    text-transform:uppercase;letter-spacing:0.06em;color:var(--fairway);
+    font-weight:600;text-align:center;margin-bottom:8px;
+  }
+  .score-box{padding:6px 0;text-align:center;border-top:1px dashed var(--line-soft);}
+  .score-box:first-of-type{border-top:none;}
+  .score-box .pname{
+    font-family:'IBM Plex Mono',monospace;font-size:0.66rem;
+    text-transform:uppercase;letter-spacing:0.04em;color:var(--ink-soft);
+    margin-bottom:6px;display:flex;justify-content:center;gap:5px;align-items:center;
+  }
+  .pop-dot{
+    width:6px;height:6px;border-radius:50%;background:var(--gold);display:inline-block;
+  }
+  .stepper{display:flex;align-items:center;justify-content:center;gap:8px;}
+  .stepper button{
+    width:32px;height:32px;border-radius:50%;
+    border:1px solid var(--ink);background:var(--paper);
+    font-size:1.05rem;color:var(--ink);cursor:pointer;
+  }
+  .stepper button:active{background:var(--fairway);color:#fff;}
+  .stepper .val{
+    font-family:'IBM Plex Mono',monospace;font-weight:700;font-size:1.3rem;
+    min-width:28px;
+  }
+  .net-line{
+    text-align:center;font-family:'IBM Plex Mono',monospace;font-size:0.62rem;
+    color:var(--ink-soft);margin-top:2px;
+  }
+  .hole-result{
+    text-align:center;font-family:'IBM Plex Mono',monospace;
+    font-size:0.75rem;color:var(--ink-soft);margin:6px 0 18px;min-height:1em;
+  }
+
+  /* ---------- Scorecard grid ---------- */
+  .grid-wrap{overflow-x:auto;margin-bottom:16px;}
+  table.grid{
+    border-collapse:collapse;width:100%;min-width:460px;
+    font-family:'IBM Plex Mono',monospace;font-size:0.76rem;
+  }
+  table.grid th, table.grid td{
+    border:1px solid var(--line-soft);
+    padding:5px 4px;text-align:center;
+  }
+  table.grid th{
+    background:var(--ink);color:var(--card);font-weight:500;font-size:0.66rem;
+  }
+  table.grid td.cur{background:rgba(124,139,111,0.18);font-weight:700;}
+  table.grid td.label{
+    text-align:left;font-size:0.66rem;text-transform:uppercase;
+    letter-spacing:0.04em;color:var(--ink-soft);white-space:nowrap;padding-left:8px;
+  }
+  table.grid td.counted{color:var(--fairway);font-weight:700;}
+  table.grid td.pop::after{content:'\u2022';color:var(--gold);margin-left:2px;}
+
+  /* ---------- Strokes assignment ---------- */
+  .stroke-player{
+    border:1px solid var(--line-soft);border-radius:5px;padding:10px;margin-bottom:12px;
+  }
+  .stroke-player .sp-head{
+    display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;
+  }
+  .stroke-player .sp-name{font-weight:600;font-size:0.85rem;}
+  .stroke-player .sp-count{
+    font-family:'IBM Plex Mono',monospace;font-size:0.68rem;color:var(--ink-soft);
+  }
+  .stroke-player .sp-count.match{color:var(--fairway);}
+  .hole-toggles{
+    display:grid;grid-template-columns:repeat(9,1fr);gap:4px;
+  }
+  .hole-toggles .htg{
+    aspect-ratio:1;border:1px solid var(--line);border-radius:3px;
+    display:flex;align-items:center;justify-content:center;
+    font-family:'IBM Plex Mono',monospace;font-size:0.68rem;
+    cursor:pointer;background:#fff;color:var(--ink-soft);
+  }
+  .hole-toggles .htg.on{background:var(--gold);border-color:var(--gold);color:#fff;font-weight:700;}
+  .autofill{
+    font-family:'IBM Plex Mono',monospace;font-size:0.66rem;color:var(--fairway);
+    background:none;border:1px solid var(--fairway);border-radius:3px;
+    padding:3px 7px;cursor:pointer;margin-left:8px;
+  }
+
+  /* ---------- Summary ---------- */
+  .summary-line{
+    display:flex;justify-content:space-between;align-items:center;
+    padding:7px 0;border-bottom:1px dashed var(--line);
+    font-family:'IBM Plex Mono',monospace;font-size:0.82rem;
+    gap:10px;
+  }
+  .summary-line:last-child{border-bottom:none;}
+  .summary-total{
+    margin-top:10px;padding-top:12px;border-top:2px solid var(--ink);
+    display:flex;justify-content:space-between;
+    font-family:'Roboto Slab',serif;font-weight:700;font-size:1.05rem;
+  }
+
+  .foot-note{
+    text-align:center;font-size:0.68rem;color:var(--ink-soft);
+    font-family:'IBM Plex Mono',monospace;margin-top:24px;line-height:1.6;
+  }
+</style>
+</head>
+<body>
+<div class="wrap" id="app"></div>
+
+<script>
+/* ============ STATE ============ */
+const STORAGE_KEY = 'nassau-ledger-match-v2';
+
+function defaultState(){
+  return {
+    stage: 'setup', // setup -> strokes -> match
+    numPlayers: 2,
+    players: [
+      {name:'Player 1', handicap:0},
+      {name:'Player 2', handicap:0}
+    ],
+    teamNameA: 'Team A',
+    teamNameB: 'Team B',
+    stakeFront:5, stakeBack:5, stake18:5, stakePress:5,
+    pressThreshold: 2, // 0 = off, else N-down triggers a press
+    pressOnOverall:false,
+    strokes: [ Array(18).fill(false), Array(18).fill(false) ], // per player, per hole
+    holes: Array.from({length:18}, ()=>({scores:[null,null]})),
+    currentHole:1
+  };
+}
+
+let state = load();
+
+function load(){
+  try{
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if(!raw) return defaultState();
+    const parsed = JSON.parse(raw);
+    if(!parsed.holes || parsed.holes.length!==18 || !parsed.players) return defaultState();
+    return parsed;
+  }catch(e){ return defaultState(); }
+}
+function save(){
+  try{ localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }catch(e){}
+}
+
+function sideLabel(side){
+  if(state.numPlayers===2){
+    return side==='A' ? (state.players[0].name || 'Player 1') : (state.players[1].name || 'Player 2');
+  }
+  return side==='A' ? (state.teamNameA || 'Team A') : (state.teamNameB || 'Team B');
+}
+function sidePlayerIdxs(side){
+  if(state.numPlayers===2) return side==='A' ? [0] : [1];
+  return side==='A' ? [0,1] : [2,3];
+}
+
+/* ============ MATCH LOGIC ============ */
+
+function netScore(playerIdx, hole){
+  const rec = state.holes[hole-1];
+  const gross = rec.scores[playerIdx];
+  if(gross==null) return null;
+  const stroke = (state.strokes[playerIdx] && state.strokes[playerIdx][hole-1]) ? 1 : 0;
+  return gross - stroke;
+}
+
+// Value counting toward the side's score on a hole (best ball for teams)
+function sideValue(side, hole){
+  const idxs = sidePlayerIdxs(side);
+  const nets = idxs.map(i=>netScore(i,hole)).filter(v=>v!=null);
+  if(nets.length===0) return null;
+  return Math.min(...nets);
+}
+
+// which player index's net score counted for a side on a hole (for grid highlight)
+function countedPlayer(side, hole){
+  const idxs = sidePlayerIdxs(side);
+  let best = null, bestVal = Infinity;
+  idxs.forEach(i=>{
+    const v = netScore(i,hole);
+    if(v!=null && v<bestVal){ bestVal=v; best=i; }
+  });
+  return best;
+}
+
+function sideWinner(hole){
+  const a = sideValue('A', hole);
+  const b = sideValue('B', hole);
+  if(a==null || b==null) return null;
+  if(a<b) return 'A';
+  if(b<a) return 'B';
+  return 'H';
+}
+
+// Build a thread (a bet segment) recursively, spawning auto-press child presses.
+function buildThread(start, end, threshold, label){
+  let diff = 0;
+  let prevAbs = 0;
+  const children = [];
+  let playedTo = start - 1;
+  for(let h = start; h <= end; h++){
+    const w = sideWinner(h);
+    if(w === null) break;
+    playedTo = h;
+    if(w === 'A') diff += 1;
+    else if(w === 'B') diff -= 1;
+    const curAbs = Math.abs(diff);
+    if(threshold>0 && curAbs === threshold && prevAbs === threshold-1 && h < end){
+      children.push(buildThread(h+1, end, threshold, 'Press ' + (h+1) + '\u2013' + end));
+    }
+    prevAbs = curAbs;
+  }
+  const complete = playedTo === end;
+  return { start, end, label, diff, playedTo, complete, children };
+}
+
+function buildAllThreads(){
+  const t = state.pressThreshold || 0;
+  const front = buildThread(1, 9, t, 'Front 9');
+  const back  = buildThread(10, 18, t, 'Back 9');
+  const overall = buildThread(1, 18, (t>0 && state.pressOnOverall) ? t : 0, 'Overall 18');
+  return { front, back, overall };
+}
+
+function statusText(thread){
+  if(thread.diff === 0) return 'AS';
+  const who = thread.diff > 0 ? sideLabel('A') : sideLabel('B');
+  return who + ' ' + Math.abs(thread.diff) + ' UP';
+}
+function statusClass(thread){
+  if(thread.diff===0) return 'square';
+  return thread.diff>0 ? 'up-a' : 'up-b';
+}
+
+function flatten(thread, depth=0, out=[]){
+  out.push({thread, depth});
+  thread.children.forEach(c => flatten(c, depth+1, out));
+  return out;
+}
+
+function settle(thread, stake){
+  if(!thread.complete) return null;
+  if(thread.diff === 0) return {a:0, b:0, tie:true};
+  if(thread.diff > 0) return {a:stake, b:-stake, tie:false};
+  return {a:-stake, b:stake, tie:false};
+}
+
+/* ============ HANDICAP / POPS ============ */
+
+function computePops(){
+  const hcps = state.players.slice(0, state.numPlayers).map(p=>Number(p.handicap)||0);
+  const min = Math.min(...hcps);
+  return hcps.map(h=>Math.round(h - min));
+}
+
+function resizePlayerArrays(){
+  // ensure players / strokes / holes.scores match numPlayers
+  while(state.players.length < state.numPlayers){
+    state.players.push({name:'Player '+(state.players.length+1), handicap:0});
+  }
+  state.players = state.players.slice(0, state.numPlayers);
+  while(state.strokes.length < state.numPlayers){
+    state.strokes.push(Array(18).fill(false));
+  }
+  state.strokes = state.strokes.slice(0, state.numPlayers);
+  state.holes.forEach(h=>{
+    while(h.scores.length < state.numPlayers) h.scores.push(null);
+    h.scores = h.scores.slice(0, state.numPlayers);
+  });
+}
+
+/* ============ RENDER ============ */
+
+const app = document.getElementById('app');
+
+function render(){
+  app.innerHTML = '';
+  app.appendChild(renderHeader());
+  if(state.stage === 'setup'){
+    app.appendChild(renderSetup());
+  } else if(state.stage === 'strokes'){
+    app.appendChild(renderStrokes());
+  } else {
+    app.appendChild(renderBoard());
+    app.appendChild(renderHoleEntry());
+    app.appendChild(renderGrid());
+    app.appendChild(renderSummary());
+  }
+  const foot = document.createElement('div');
+  foot.className = 'foot-note';
+  foot.textContent = 'Nassau Ledger \u2014 scores saved on this device only.';
+  app.appendChild(foot);
+}
+
+function renderHeader(){
+  const h = document.createElement('header');
+  h.className = 'top';
+  const left = document.createElement('div');
+  left.innerHTML = '<h1>Nassau Ledger</h1><div class="sub">Match play \u00b7 auto press \u00b7 handicap</div>';
+  h.appendChild(left);
+  if(state.stage === 'match'){
+    const btn = document.createElement('button');
+    btn.className = 'newmatch';
+    btn.textContent = 'New match';
+    btn.onclick = () => {
+      if(confirm('Start a new match? This clears the current scorecard.')){
+        state = defaultState();
+        save(); render();
+      }
+    };
+    h.appendChild(btn);
+  }
+  return h;
+}
+
+/* ---------- Setup screen ---------- */
+
+function renderSetup(){
+  const card = document.createElement('div');
+  card.className = 'card';
+  card.innerHTML = '<h2>Set up the match</h2>';
+
+  // player count
+  const seg = document.createElement('div');
+  seg.className = 'segmented';
+  [2,4].forEach(n=>{
+    const b = document.createElement('button');
+    b.textContent = n===2 ? '2 Players' : '4 Players (Teams)';
+    if(state.numPlayers===n) b.classList.add('active');
+    b.onclick = () => {
+      state.numPlayers = n;
+      resizePlayerArrays();
+      save(); render();
+    };
+    seg.appendChild(b);
+  });
+  card.appendChild(seg);
+
+  const mkField = (labelText, id, value, type='text', extra) => {
+    const wrap = document.createElement('label');
+    wrap.className = 'field';
+    wrap.innerHTML = '<span>'+labelText+'</span>';
+    const input = document.createElement('input');
+    input.type = type;
+    input.id = id;
+    input.value = value;
+    if(type==='number'){ input.inputMode='decimal'; }
+    if(extra) input.step = extra;
+    wrap.appendChild(input);
+    return wrap;
+  };
+
+  if(state.numPlayers===2){
+    const row2 = document.createElement('div');
+    row2.className = 'row2';
+    row2.appendChild(mkField('Player 1', 'p-name-0', state.players[0].name));
+    row2.appendChild(mkField('Player 2', 'p-name-1', state.players[1].name));
+    card.appendChild(row2);
+
+    card.appendChild(document.createElement('h3')).textContent = 'Handicaps (for stroke allocation)';
+    const hrow = document.createElement('div');
+    hrow.className = 'row2';
+    hrow.appendChild(mkField(state.players[0].name+' HCP', 'p-hcp-0', state.players[0].handicap, 'number', '0.1'));
+    hrow.appendChild(mkField(state.players[1].name+' HCP', 'p-hcp-1', state.players[1].handicap, 'number', '0.1'));
+    card.appendChild(hrow);
+  } else {
+    const teamA = document.createElement('div');
+    teamA.className = 'team-block';
+    teamA.innerHTML = '<div class="team-title">Team A</div>';
+    teamA.appendChild(mkField('Team A name', 'team-name-a', state.teamNameA));
+    const rowA = document.createElement('div');
+    rowA.className = 'row2';
+    rowA.appendChild(mkField('Player 1', 'p-name-0', state.players[0].name));
+    rowA.appendChild(mkField('Player 2', 'p-name-1', state.players[1].name));
+    teamA.appendChild(rowA);
+    const rowAh = document.createElement('div');
+    rowAh.className = 'row2';
+    rowAh.appendChild(mkField(state.players[0].name+' HCP', 'p-hcp-0', state.players[0].handicap, 'number', '0.1'));
+    rowAh.appendChild(mkField(state.players[1].name+' HCP', 'p-hcp-1', state.players[1].handicap, 'number', '0.1'));
+    teamA.appendChild(rowAh);
+    card.appendChild(teamA);
+
+    const teamB = document.createElement('div');
+    teamB.className = 'team-block';
+    teamB.innerHTML = '<div class="team-title">Team B</div>';
+    teamB.appendChild(mkField('Team B name', 'team-name-b', state.teamNameB));
+    const rowB = document.createElement('div');
+    rowB.className = 'row2';
+    rowB.appendChild(mkField('Player 1', 'p-name-2', state.players[2] ? state.players[2].name : 'Player 3'));
+    rowB.appendChild(mkField('Player 2', 'p-name-3', state.players[3] ? state.players[3].name : 'Player 4'));
+    teamB.appendChild(rowB);
+    const rowBh = document.createElement('div');
+    rowBh.className = 'row2';
+    rowBh.appendChild(mkField('P3 HCP', 'p-hcp-2', state.players[2] ? state.players[2].handicap : 0, 'number', '0.1'));
+    rowBh.appendChild(mkField('P4 HCP', 'p-hcp-3', state.players[3] ? state.players[3].handicap : 0, 'number', '0.1'));
+    teamB.appendChild(rowBh);
+    card.appendChild(teamB);
+
+    const note = document.createElement('div');
+    note.className = 'checkline';
+    note.style.marginTop = '-4px';
+    note.innerHTML = 'Team score each hole is best ball: the lower of the two teammates\u2019 net scores counts.';
+    card.appendChild(note);
+  }
+
+  card.appendChild(document.createElement('h3')).textContent = 'Auto press';
+  const pressRow = document.createElement('div');
+  pressRow.className = 'row2';
+
+  const threshWrap = document.createElement('label');
+  threshWrap.className = 'field';
+  threshWrap.innerHTML = '<span>Trigger when down</span>';
+  const sel = document.createElement('select');
+  sel.id = 'setup-thresh';
+  [[1,'1 down'],[2,'2 down (standard)'],[3,'3 down'],[0,'Off (no auto press)']].forEach(([v,t])=>{
+    const opt = document.createElement('option');
+    opt.value = v; opt.textContent = t;
+    if(Number(state.pressThreshold)===v) opt.selected = true;
+    sel.appendChild(opt);
+  });
+  threshWrap.appendChild(sel);
+  pressRow.appendChild(threshWrap);
+
+  const stakeWrap = mkField('Press stake ($)', 'setup-press', state.stakePress, 'number');
+  pressRow.appendChild(stakeWrap);
+  card.appendChild(pressRow);
+
+  const check = document.createElement('label');
+  check.className = 'checkline';
+  check.innerHTML = '<input type="checkbox" id="setup-overallpress" '+(state.pressOnOverall?'checked':'')+'> Also auto-press the overall 18-hole bet (uncommon \u2014 most groups leave this off)';
+  card.appendChild(check);
+
+  card.appendChild(document.createElement('h3')).textContent = 'Stakes ($ per bet)';
+  const row3 = document.createElement('div');
+  row3.className = 'row3';
+  row3.appendChild(mkField('Front', 'setup-front', state.stakeFront, 'number'));
+  row3.appendChild(mkField('Back', 'setup-back', state.stakeBack, 'number'));
+  row3.appendChild(mkField('18', 'setup-18', state.stake18, 'number'));
+  row3.appendChild(document.createElement('div')); // spacer, press stake shown above
+  card.appendChild(row3);
+
+  const btn = document.createElement('button');
+  btn.className = 'btn-primary';
+  btn.textContent = 'Continue';
+  btn.onclick = () => {
+    // gather names/handicaps
+    for(let i=0;i<state.numPlayers;i++){
+      const nameEl = document.getElementById('p-name-'+i);
+      const hcpEl = document.getElementById('p-hcp-'+i);
+      state.players[i] = state.players[i] || {name:'Player '+(i+1), handicap:0};
+      state.players[i].name = (nameEl && nameEl.value.trim()) || ('Player '+(i+1));
+      state.players[i].handicap = hcpEl ? (Number(hcpEl.value)||0) : 0;
+    }
+    if(state.numPlayers===4){
+      state.teamNameA = document.getElementById('team-name-a').value.trim() || 'Team A';
+      state.teamNameB = document.getElementById('team-name-b').value.trim() || 'Team B';
+    }
+    state.pressThreshold = Number(document.getElementById('setup-thresh').value);
+    state.pressOnOverall = document.getElementById('setup-overallpress').checked;
+    state.stakeFront = Number(document.getElementById('setup-front').value) || 0;
+    state.stakeBack = Number(document.getElementById('setup-back').value) || 0;
+    state.stake18 = Number(document.getElementById('setup-18').value) || 0;
+    state.stakePress = Number(document.getElementById('setup-press').value) || 0;
+
+    resizePlayerArrays();
+
+    const pops = computePops();
+    const anyPops = pops.some(p=>p>0);
+    state.stage = anyPops ? 'strokes' : 'match';
+    save(); render();
+  };
+  card.appendChild(btn);
+  return card;
+}
+
+/* ---------- Stroke assignment screen ---------- */
+
+function renderStrokes(){
+  const card = document.createElement('div');
+  card.className = 'card';
+  card.innerHTML = '<h2>Assign strokes</h2>';
+
+  const pops = computePops();
+  const explain = document.createElement('div');
+  explain.className = 'checkline';
+  explain.style.marginBottom = '14px';
+  explain.innerHTML = 'The low handicap plays scratch. Since the course isn\u2019t loaded, tap the holes where each player below gets a stroke \u2014 use whatever the group\u2019s stroke index says, or just spread them out.';
+  card.appendChild(explain);
+
+  state.players.forEach((p, idx) => {
+    const pop = pops[idx];
+    if(pop <= 0) return;
+    const block = document.createElement('div');
+    block.className = 'stroke-player';
+
+    const head = document.createElement('div');
+    head.className = 'sp-head';
+    const assigned = state.strokes[idx].filter(Boolean).length;
+    head.innerHTML = '<span class="sp-name">'+p.name+'</span>'+
+      '<span class="sp-count '+(assigned===pop?'match':'')+'">'+assigned+' / '+pop+' pops assigned</span>';
+    block.appendChild(head);
+
+    const autoBtn = document.createElement('button');
+    autoBtn.className = 'autofill';
+    autoBtn.textContent = 'Auto-fill holes 1\u2013' + pop;
+    autoBtn.onclick = () => {
+      state.strokes[idx] = Array(18).fill(false);
+      for(let h=0; h<pop; h++) state.strokes[idx][h] = true;
+      save(); render();
+    };
+    block.appendChild(autoBtn);
+
+    const grid1 = document.createElement('div');
+    grid1.className = 'hole-toggles';
+    grid1.style.marginTop = '10px';
+    for(let h=1; h<=9; h++){
+      grid1.appendChild(holeToggle(idx, h));
+    }
+    block.appendChild(grid1);
+
+    const grid2 = document.createElement('div');
+    grid2.className = 'hole-toggles';
+    grid2.style.marginTop = '4px';
+    for(let h=10; h<=18; h++){
+      grid2.appendChild(holeToggle(idx, h));
+    }
+    block.appendChild(grid2);
+
+    card.appendChild(block);
+  });
+
+  const btn = document.createElement('button');
+  btn.className = 'btn-primary';
+  btn.textContent = 'Start match';
+  btn.onclick = () => { state.stage = 'match'; save(); render(); };
+  card.appendChild(btn);
+
+  const back = document.createElement('button');
+  back.className = 'btn-secondary';
+  back.textContent = '\u2039 Back to setup';
+  back.onclick = () => { state.stage = 'setup'; save(); render(); };
+  card.appendChild(back);
+
+  return card;
+}
+
+function holeToggle(playerIdx, hole){
+  const d = document.createElement('div');
+  d.className = 'htg' + (state.strokes[playerIdx][hole-1] ? ' on' : '');
+  d.textContent = hole;
+  d.onclick = () => {
+    state.strokes[playerIdx][hole-1] = !state.strokes[playerIdx][hole-1];
+    save(); render();
+  };
+  return d;
+}
+
+/* ---------- Match: status board ---------- */
+
+function renderBoard(){
+  const { front, back, overall } = buildAllThreads();
+  const board = document.createElement('div');
+  board.className = 'board';
+
+  [front, back, overall].forEach(mainThread => {
+    const flat = flatten(mainThread);
+    flat.forEach(({thread, depth}) => {
+      const row = document.createElement('div');
+      row.className = depth===0 ? 'thread' : 'press-child';
+
+      const top = document.createElement('div');
+      top.className = 'thread-row';
+
+      const nameWrap = document.createElement('div');
+      if(depth>0){
+        const tag = document.createElement('span');
+        tag.className = 'press-tag';
+        tag.textContent = 'PRESS';
+        nameWrap.appendChild(tag);
+      }
+      const nm = document.createElement('span');
+      nm.className = 'thread-name';
+      nm.textContent = depth===0 ? thread.label : ('Holes ' + thread.start + '\u2013' + thread.end);
+      nameWrap.appendChild(nm);
+      top.appendChild(nameWrap);
+
+      const status = document.createElement('div');
+      status.className = 'thread-status ' + statusClass(thread);
+      status.textContent = thread.playedTo < thread.start ? '\u2014' : statusText(thread);
+      top.appendChild(status);
+
+      row.appendChild(top);
+      board.appendChild(row);
+    });
+  });
+
+  return board;
+}
+
+/* ---------- Match: hole entry ---------- */
+
+function renderHoleEntry(){
+  const wrap = document.createElement('div');
+  const hole = state.currentHole;
+
+  const nav = document.createElement('div');
+  nav.className = 'hole-nav';
+  const prevBtn = document.createElement('button');
+  prevBtn.textContent = '\u2039';
+  prevBtn.disabled = hole<=1;
+  prevBtn.onclick = () => { state.currentHole = Math.max(1, hole-1); save(); render(); };
+
+  const title = document.createElement('div');
+  title.className = 'hole-title';
+  title.innerHTML = 'Hole ' + hole + '<small>' + (hole<=9 ? 'Front 9' : 'Back 9') + '</small>';
+
+  const nextBtn = document.createElement('button');
+  nextBtn.textContent = '\u203a';
+  nextBtn.disabled = hole>=18;
+  nextBtn.onclick = () => { state.currentHole = Math.min(18, hole+1); save(); render(); };
+
+  nav.appendChild(prevBtn); nav.appendChild(title); nav.appendChild(nextBtn);
+  wrap.appendChild(nav);
+
+  const entry = document.createElement('div');
+  entry.className = 'sides-entry';
+  entry.appendChild(sideColumn('A', hole));
+  entry.appendChild(sideColumn('B', hole));
+  wrap.appendChild(entry);
+
+  const result = document.createElement('div');
+  result.className = 'hole-result';
+  const w = sideWinner(hole);
+  if(w==='A') result.textContent = sideLabel('A') + ' win the hole';
+  else if(w==='B') result.textContent = sideLabel('B') + ' win the hole';
+  else if(w==='H') result.textContent = 'Hole halved';
+  else result.textContent = 'Enter scores to settle the hole';
+  wrap.appendChild(result);
+
+  return wrap;
+}
+
+function sideColumn(side, hole){
+  const col = document.createElement('div');
+  col.className = 'side-col';
+  const label = document.createElement('div');
+  label.className = 'side-label';
+  label.textContent = sideLabel(side);
+  col.appendChild(label);
+
+  sidePlayerIdxs(side).forEach(idx=>{
+    col.appendChild(scoreBox(idx, hole));
+  });
+
+  if(state.numPlayers===4){
+    const net = sideValue(side, hole);
+    const line = document.createElement('div');
+    line.className = 'net-line';
+    line.textContent = net==null ? 'best ball: \u2013' : ('best ball counts: ' + net);
+    col.appendChild(line);
+  }
+  return col;
+}
+
+function scoreBox(playerIdx, hole){
+  const rec = state.holes[hole-1];
+  const p = state.players[playerIdx];
+  const box = document.createElement('div');
+  box.className = 'score-box';
+
+  const hasPop = state.strokes[playerIdx] && state.strokes[playerIdx][hole-1];
+  const label = document.createElement('div');
+  label.className = 'pname';
+  label.innerHTML = p.name + (hasPop ? '<span class="pop-dot" title="stroke on this hole"></span>' : '');
+  box.appendChild(label);
+
+  const stepper = document.createElement('div');
+  stepper.className = 'stepper';
+
+  const minus = document.createElement('button');
+  minus.textContent = '\u2212';
+  minus.onclick = () => {
+    const cur = rec.scores[playerIdx] == null ? 5 : rec.scores[playerIdx];
+    rec.scores[playerIdx] = Math.max(1, cur-1);
+    save(); render();
+  };
+
+  const val = document.createElement('div');
+  val.className = 'val';
+  val.textContent = rec.scores[playerIdx]==null ? '\u2013' : rec.scores[playerIdx];
+
+  const plus = document.createElement('button');
+  plus.textContent = '+';
+  plus.onclick = () => {
+    const cur = rec.scores[playerIdx] == null ? 3 : rec.scores[playerIdx];
+    rec.scores[playerIdx] = Math.min(15, cur+1);
+    save(); render();
+  };
+
+  stepper.appendChild(minus); stepper.appendChild(val); stepper.appendChild(plus);
+  box.appendChild(stepper);
+
+  if(hasPop && rec.scores[playerIdx]!=null){
+    const net = document.createElement('div');
+    net.className = 'net-line';
+    net.textContent = 'net ' + (rec.scores[playerIdx]-1);
+    box.appendChild(net);
+  }
+  return box;
+}
+
+/* ---------- Match: full scorecard grid ---------- */
+
+function renderGrid(){
+  const wrap = document.createElement('div');
+  wrap.className = 'grid-wrap';
+  const table = document.createElement('table');
+  table.className = 'grid';
+
+  const headRow = document.createElement('tr');
+  headRow.innerHTML = '<th style="text-align:left;padding-left:8px;">Player</th>' +
+    Array.from({length:18},(_,i)=>'<th>'+(i+1)+'</th>').join('');
+  table.appendChild(headRow);
+
+  state.players.forEach((p, idx) => {
+    const side = state.numPlayers===2 ? (idx===0?'A':'B') : (idx<2?'A':'B');
+    const tr = document.createElement('tr');
+    let cells = '<td class="label">'+p.name+'</td>';
+    for(let h=1; h<=18; h++){
+      const rec = state.holes[h-1];
+      const v = rec.scores[idx]==null ? '' : rec.scores[idx];
+      let cls = h===state.currentHole ? 'cur' : '';
+      const cp = countedPlayer(side, h);
+      if(cp===idx) cls += ' counted';
+      if(state.strokes[idx] && state.strokes[idx][h-1]) cls += ' pop';
+      cells += '<td class="'+cls.trim()+'">'+v+'</td>';
+    }
+    tr.innerHTML = cells;
+    table.appendChild(tr);
+  });
+
+  wrap.appendChild(table);
+
+  const note = document.createElement('div');
+  note.className = 'foot-note';
+  note.style.marginTop = '8px';
+  note.textContent = state.numPlayers===4
+    ? 'Bold green = that player\u2019s net score counted for their team\u2019s best ball. Gold dot = stroke hole.'
+    : 'Gold dot = stroke hole.';
+  wrap.appendChild(note);
+
+  return wrap;
+}
+
+/* ---------- Match: money summary ---------- */
+
+function renderSummary(){
+  const { front, back, overall } = buildAllThreads();
+  const card = document.createElement('div');
+  card.className = 'card';
+  card.innerHTML = '<h2>Money summary</h2>';
+
+  let totalA = 0, totalB = 0;
+  let anySettled = false;
+
+  const addLines = (mainThread, stake, label) => {
+    const flat = flatten(mainThread);
+    flat.forEach(({thread, depth}) => {
+      const s = settle(thread, depth===0 ? stake : state.stakePress);
+      const line = document.createElement('div');
+      line.className = 'summary-line';
+      const nameSpan = depth===0
+        ? label
+        : ('&nbsp;&nbsp;\u21b3 Press ' + thread.start + '\u2013' + thread.end);
+      let valText;
+      if(!s){
+        valText = 'in progress';
+      } else if(s.tie){
+        valText = 'push';
+      } else {
+        anySettled = true;
+        totalA += s.a; totalB += s.b;
+        const winner = s.a>0 ? sideLabel('A') : sideLabel('B');
+        valText = winner + ' +$' + Math.abs(s.a);
+      }
+      line.innerHTML = '<span>'+nameSpan+'</span><span>'+valText+'</span>';
+      card.appendChild(line);
+    });
+  };
+
+  addLines(front, state.stakeFront, 'Front 9');
+  addLines(back, state.stakeBack, 'Back 9');
+  addLines(overall, state.stake18, 'Overall 18');
+
+  const total = document.createElement('div');
+  total.className = 'summary-total';
+  if(anySettled){
+    if(totalA === totalB){
+      total.innerHTML = '<span>Net</span><span>All square</span>';
+    } else if(totalA > totalB){
+      total.innerHTML = '<span>Net</span><span>'+sideLabel('A')+' +$'+(totalA)+'</span>';
+    } else {
+      total.innerHTML = '<span>Net</span><span>'+sideLabel('B')+' +$'+(totalB)+'</span>';
+    }
+  } else {
+    total.innerHTML = '<span>Net</span><span>\u2014</span>';
+  }
+  card.appendChild(total);
+
+  if(state.numPlayers===4){
+    const note = document.createElement('div');
+    note.className = 'foot-note';
+    note.style.marginTop = '8px';
+    note.textContent = 'Split each side\u2019s total evenly between its two players, or however your group agrees.';
+    card.appendChild(note);
+  }
+
+  return card;
+}
+
+render();
+</script>
+</body>
+</html>
