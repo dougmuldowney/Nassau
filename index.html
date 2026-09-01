@@ -471,19 +471,29 @@ function loadCourses(){
 function saveCourses(list){
   try{ localStorage.setItem(COURSE_KEY, JSON.stringify(list)); }catch(e){}
 }
+// Must stay byte-identical in behaviour to keyOf() in the courses function:
+// the server uses it to decide update-vs-insert and to find the row to delete.
+// Each part is trimmed separately -- trimming only the joined string leaves
+// inner whitespace on the name and would file " Plateau Club " as a new course.
 function courseKey(c){
-  return ((c.name||'') + '|' + (c.tee||'')).toLowerCase().trim();
+  return ((c.name||'').trim() + '|' + (c.tee||'').trim()).toLowerCase();
 }
-// What the picker shows. Kept separate from loadCourses() so that saving or
-// deleting only ever touches the user's own list -- a built-in must not be
-// written into localStorage just by being displayed.
+// What the picker shows, in one precedence order: a course you edited yourself
+// shadows the shared copy, which shadows the built-in. Kept separate from
+// loadCourses() so saving or deleting only ever touches your own list -- a
+// built-in or a shared course must not land in localStorage just by being shown.
 function allCourses(){
-  const saved = loadCourses();
-  const savedKeys = new Set(saved.map(courseKey));
+  const mine = loadCourses();
+  const taken = new Set(mine.map(courseKey));
+  const shared = loadSharedCache()
+    .filter(c => !taken.has(courseKey(c)))
+    .map(c => Object.assign({}, c, {shared:true}));
+  shared.forEach(c => taken.add(courseKey(c)));
   const builtins = BUILTIN_COURSES
-    .filter(c => !savedKeys.has(courseKey(c)))   // an edited copy wins
+    .filter(c => !taken.has(courseKey(c)))
     .map(c => Object.assign({}, c, {builtin:true}));
-  return builtins.concat(saved).sort((a,b)=>(a.name||'').localeCompare(b.name||''));
+  return builtins.concat(shared, mine)
+    .sort((a,b)=>(a.name||'').localeCompare(b.name||''));
 }
 function rememberCourse(course){
   const list = loadCourses();
@@ -497,6 +507,88 @@ function rememberCourse(course){
 }
 function forgetCourse(key){
   saveCourses(loadCourses().filter(c => courseKey(c) !== key));
+}
+/* ---------- Shared course library ---------- */
+// Courses live in a Netlify Blob so a card scanned on one phone shows up on
+// everyone else's. The network is not on the critical path, though: a golf
+// course is exactly where signal fails, so the last known list is mirrored into
+// localStorage and used whenever the fetch does not come back. The app is fully
+// usable offline; it just stops learning about new courses.
+const SHARED_CACHE_KEY = 'nassau-ledger-shared-v1';
+const COURSES_ENDPOINT = '/.netlify/functions/courses';
+
+// 'idle' | 'syncing' | 'ok' | 'offline'
+let sharedState = { status:'idle', error:'' };
+
+function loadSharedCache(){
+  try{
+    const raw = localStorage.getItem(SHARED_CACHE_KEY);
+    const parsed = raw ? JSON.parse(raw) : [];
+    return Array.isArray(parsed) ? parsed : [];
+  }catch(e){ return []; }
+}
+function saveSharedCache(list){
+  try{ localStorage.setItem(SHARED_CACHE_KEY, JSON.stringify(list)); }catch(e){}
+}
+
+async function fetchSharedCourses(){
+  sharedState = { status:'syncing', error:'' };
+  try{
+    const res = await fetch(COURSES_ENDPOINT);
+    const data = await res.json().catch(()=>({}));
+    if(!res.ok) throw new Error(data.error || ('Sync failed (' + res.status + ').'));
+    saveSharedCache(data.courses || []);
+    sharedState = { status:'ok', error:'' };
+  }catch(err){
+    // Not an error state the user needs to act on -- the cached list still
+    // works, so this only explains why a course someone else added is missing.
+    sharedState = { status:'offline', error: err.message || 'Offline' };
+  }
+  render();
+}
+
+// Best-effort push. The local save has already happened by the time this runs,
+// so a failure here costs the sharing, never the course.
+async function pushSharedCourse(course){
+  try{
+    const res = await fetch(COURSES_ENDPOINT, {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ course })
+    });
+    const data = await res.json().catch(()=>({}));
+    if(!res.ok) throw new Error(data.error || 'Could not share this course.');
+    saveSharedCache(data.courses || []);
+    sharedState = { status:'ok', error:'' };
+  }catch(err){
+    sharedState = { status:'offline', error: err.message || 'Could not share this course.' };
+  }
+  render();
+}
+
+async function deleteSharedCourse(key){
+  try{
+    const res = await fetch(COURSES_ENDPOINT, {
+      method:'DELETE',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ key })
+    });
+    const data = await res.json().catch(()=>({}));
+    if(!res.ok) throw new Error(data.error || 'Could not remove this course.');
+    saveSharedCache(data.courses || []);
+    sharedState = { status:'ok', error:'' };
+  }catch(err){
+    sharedState = { status:'offline', error: err.message || 'Could not remove this course.' };
+  }
+  render();
+}
+
+// True when this course exists in the user's own saved list, as opposed to
+// being one of the built-ins. Only these can be deleted.
+function isSavedCourse(course){
+  if(!course) return false;
+  const key = courseKey(course);
+  return loadCourses().some(c => courseKey(c) === key);
 }
 // A course is only usable for automatic allocation when its stroke indexes are
 // a true 1-18 ranking; anything less and we fall back to manual toggles.
@@ -888,11 +980,28 @@ function renderCourseCard(){
       render();
     };
     line.appendChild(edit);
+    // "Change" only unloads it from this match; the course stays in the list.
     const clear = document.createElement('button');
-    clear.className = 'cl-act danger';
-    clear.textContent = 'Remove';
+    clear.className = 'cl-act';
+    clear.textContent = 'Change';
     clear.onclick = () => { state.course = null; save(); render(); };
     line.appendChild(clear);
+    // Deleting from the library lives here now that the dropdown has no room
+    // for a per-row control. Built-ins are not deletable -- they ship with the
+    // app and would reappear on the next load.
+    if(isSavedCourse(state.course)){
+      const del = document.createElement('button');
+      del.className = 'cl-act danger';
+      del.textContent = 'Delete';
+      del.onclick = () => {
+        const key = courseKey(state.course);
+        forgetCourse(key);
+        state.course = null;
+        save(); render();
+        deleteSharedCourse(key);
+      };
+      line.appendChild(del);
+    }
     card.appendChild(line);
 
     if(!usable){
@@ -1015,6 +1124,9 @@ function renderCourseCard(){
       applyCourseStrokes();
       scanUI = { busy:false, error:'', warnings:[], draft:null, editing:false };
       save(); render();
+      // After the local save and render, so a dead network never delays or
+      // blocks getting on with the match.
+      pushSharedCourse(course);
     };
     card.appendChild(saveBtn);
 
@@ -1030,43 +1142,59 @@ function renderCourseCard(){
   }
 
   // --- Nothing loaded: pick a saved course, or scan ---
-  const saved = allCourses();
-  if(saved.length){
-    card.appendChild(document.createElement('h3')).textContent = 'Courses';
-    saved.forEach(c => {
-      const line = document.createElement('div');
-      line.className = 'course-line';
-      const info = document.createElement('div');
-      info.style.minWidth = '0';
-      const meta = c.builtin ? 'built in' : (c.tee ? c.tee + ' tees' : 'saved');
-      info.innerHTML = '<div class="cl-name">' + c.name + '</div>' +
-        '<div class="cl-meta">' + meta + (c.ladiesSi ? ' · men’s + ladies’' : '') + '</div>';
-      line.appendChild(info);
-      const use = document.createElement('button');
-      use.className = 'cl-act';
-      use.textContent = 'Use';
-      use.onclick = () => {
-        state.course = { name:c.name, tee:c.tee, si:c.si.slice(), par:c.par.slice(),
-                         ladiesSi: c.ladiesSi ? c.ladiesSi.slice() : null };
-        applyCourseStrokes();
-        save(); render();
-      };
-      line.appendChild(use);
-      // No delete on a built-in: it ships with the app, so removing it would
-      // only make it reappear on the next load.
-      if(!c.builtin){
-        const del = document.createElement('button');
-        del.className = 'cl-act danger';
-        del.textContent = '×';
-        del.onclick = () => { forgetCourse(courseKey(c)); render(); };
-        line.appendChild(del);
-      }
-      card.appendChild(line);
-    });
+  // One row regardless of how many courses are known. The old list grew a card
+  // per course, which was fine at two and would not have been at twenty.
+  const courses = allCourses();
+  if(courses.length){
+    const wrap = document.createElement('label');
+    wrap.className = 'field';
+    wrap.innerHTML = '<span>Choose a course</span>';
+    const sel = document.createElement('select');
+    sel.id = 'course-pick';
+
+    const placeholder = new Option('Select a course…', '');
+    placeholder.selected = true;
+    sel.appendChild(placeholder);
+
+    // Grouped so a scanned course is visibly yours rather than lost among the
+    // ones that ship with the app.
+    const group = (label, list) => {
+      if(!list.length) return;
+      const g = document.createElement('optgroup');
+      g.label = label;
+      list.forEach(c => g.appendChild(new Option(
+        c.name + (c.tee ? ' — ' + c.tee : ''), courseKey(c))));
+      sel.appendChild(g);
+    };
+    group('Built in', courses.filter(c => c.builtin));
+    group('Shared', courses.filter(c => c.shared));
+    group('Edited by you', courses.filter(c => !c.builtin && !c.shared));
+
+    sel.onchange = () => {
+      const c = courses.find(x => courseKey(x) === sel.value);
+      if(!c) return;
+      state.course = { name:c.name, tee:c.tee, si:c.si.slice(), par:c.par.slice(),
+                       ladiesSi: c.ladiesSi ? c.ladiesSi.slice() : null };
+      applyCourseStrokes();
+      save(); render();
+    };
+    wrap.appendChild(sel);
+    card.appendChild(wrap);
+  }
+
+  // One quiet line, and only when there is something to say. A working sync is
+  // the expected case and does not need announcing.
+  if(sharedState.status === 'syncing' || sharedState.status === 'offline'){
+    const sync = document.createElement('div');
+    sync.className = 'scan-note';
+    sync.textContent = sharedState.status === 'syncing'
+      ? 'Checking for shared courses…'
+      : 'Offline — showing the courses saved on this device. Anything you add will need sharing again when you have signal.';
+    card.appendChild(sync);
   }
 
   card.appendChild(document.createElement('h3')).textContent =
-    saved.length ? 'Add another' : 'Load a course';
+    courses.length ? 'Or add a course' : 'Load a course';
 
   const fileInput = document.createElement('input');
   fileInput.type = 'file';
@@ -1616,6 +1744,8 @@ function renderSummary(){
 }
 
 render();
+// Pull the shared list once on load; the picker repaints when it lands.
+fetchSharedCourses();
 </script>
 </body>
 </html>

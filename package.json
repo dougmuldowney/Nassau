@@ -5,6 +5,7 @@
   "type": "module",
   "description": "Nassau match-play scorekeeping. Static page plus one Netlify Function for scorecard scanning.",
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.122.0"
+    "@anthropic-ai/sdk": "^0.122.0",
+    "@netlify/blobs": "^11.0.2"
   }
 }
