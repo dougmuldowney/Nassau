@@ -320,6 +320,65 @@
     cursor:pointer;background:#fff;color:var(--ink-soft);
   }
   .hole-toggles .htg.on{background:var(--gold);border-color:var(--gold);color:#fff;font-weight:700;}
+  .hole-toggles .htg.on2{background:var(--flag);border-color:var(--flag);}
+
+  /* ---------- Course / scorecard scan ---------- */
+  .course-line{
+    display:flex;align-items:center;justify-content:space-between;gap:10px;
+    padding:9px 11px;border:1px solid var(--line);border-radius:5px;
+    background:#fff;margin-bottom:10px;
+  }
+  .course-line .cl-name{
+    font-family:'Roboto Slab',serif;font-weight:700;font-size:0.9rem;
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  }
+  .course-line .cl-meta{
+    font-family:'IBM Plex Mono',monospace;font-size:0.66rem;
+    text-transform:uppercase;letter-spacing:0.05em;color:var(--ink-soft);margin-top:2px;
+  }
+  .course-line .cl-act{
+    background:none;border:1px solid var(--line);border-radius:3px;cursor:pointer;
+    font-family:'IBM Plex Mono',monospace;font-size:0.66rem;
+    text-transform:uppercase;letter-spacing:0.05em;color:var(--ink-soft);
+    padding:5px 8px;flex-shrink:0;
+  }
+  .course-line .cl-act.danger{color:var(--flag);border-color:var(--flag-soft);}
+  .scan-row{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:4px;}
+  .scan-btn{
+    background:var(--card);border:1px dashed var(--fairway);border-radius:5px;
+    color:var(--ink);font-family:'IBM Plex Mono',monospace;font-size:0.72rem;
+    text-transform:uppercase;letter-spacing:0.05em;padding:11px 8px;cursor:pointer;
+  }
+  .scan-btn:disabled{opacity:0.5;cursor:default;}
+  .scan-note{
+    font-family:'IBM Plex Mono',monospace;font-size:0.66rem;line-height:1.5;
+    color:var(--ink-soft);margin-top:9px;
+  }
+  .scan-note.err{color:var(--flag);}
+  .scan-warn{
+    border-left:2px solid var(--gold);background:rgba(169,138,60,0.08);
+    padding:7px 9px;border-radius:0 4px 4px 0;margin-top:9px;
+    font-size:0.76rem;line-height:1.45;color:var(--ink-soft);
+  }
+  .si-grid{
+    display:grid;grid-template-columns:repeat(9,1fr);gap:3px;margin-top:9px;
+  }
+  .si-cell{text-align:center;}
+  .si-cell .si-h{
+    font-family:'IBM Plex Mono',monospace;font-size:0.58rem;
+    color:var(--ink-soft);margin-bottom:2px;
+  }
+  .si-cell input{
+    width:100%;padding:5px 1px;text-align:center;font-size:0.82rem;
+    border:1px solid var(--line);border-radius:3px;
+    font-family:'IBM Plex Mono',monospace;
+  }
+  .si-cell input.bad{border-color:var(--flag);background:rgba(178,58,46,0.07);}
+  .si-legend{
+    font-family:'IBM Plex Mono',monospace;font-size:0.62rem;
+    text-transform:uppercase;letter-spacing:0.05em;color:var(--ink-soft);
+    margin-top:12px;
+  }
   .autofill{
     font-family:'IBM Plex Mono',monospace;font-size:0.66rem;color:var(--fairway);
     background:none;border:1px solid var(--fairway);border-radius:3px;
@@ -366,7 +425,8 @@ function defaultState(){
     stakeFront:5, stakeBack:5, stake18:5, stakePress:5,
     pressThreshold: 2, // 0 = off, else N-down triggers a press
     pressOnOverall:false,
-    strokes: [ Array(18).fill(false), Array(18).fill(false) ], // per player, per hole
+    strokes: [ Array(18).fill(0), Array(18).fill(0) ], // per player, per hole: strokes received (0,1,2)
+    course: null, // {name, tee, si:[18], par:[18]} once a scorecard is loaded
     holes: Array.from({length:18}, ()=>({scores:[null,null]})),
     currentHole:1
   };
@@ -374,12 +434,59 @@ function defaultState(){
 
 let state = load();
 
+/* ============ COURSE LIBRARY ============ */
+// Scanning a card costs a round-trip and a few cents, so a course is scanned
+// once and kept. Stored apart from the match so clearing a match keeps the
+// courses.
+const COURSE_KEY = 'nassau-ledger-courses-v1';
+
+function loadCourses(){
+  try{
+    const raw = localStorage.getItem(COURSE_KEY);
+    const parsed = raw ? JSON.parse(raw) : [];
+    return Array.isArray(parsed) ? parsed : [];
+  }catch(e){ return []; }
+}
+function saveCourses(list){
+  try{ localStorage.setItem(COURSE_KEY, JSON.stringify(list)); }catch(e){}
+}
+function courseKey(c){
+  return ((c.name||'') + '|' + (c.tee||'')).toLowerCase().trim();
+}
+function rememberCourse(course){
+  const list = loadCourses();
+  const key = courseKey(course);
+  const at = list.findIndex(c => courseKey(c) === key);
+  const entry = { name:course.name, tee:course.tee, si:course.si.slice(), par:course.par.slice(), savedAt: Date.now() };
+  if(at >= 0) list[at] = entry; else list.push(entry);
+  list.sort((a,b)=> (a.name||'').localeCompare(b.name||''));
+  saveCourses(list);
+}
+function forgetCourse(key){
+  saveCourses(loadCourses().filter(c => courseKey(c) !== key));
+}
+// A course is only usable for automatic allocation when its stroke indexes are
+// a true 1-18 ranking; anything less and we fall back to manual toggles.
+function courseUsable(course){
+  if(!course || !Array.isArray(course.si) || course.si.length !== 18) return false;
+  const vals = course.si.filter(v => Number.isInteger(v) && v >= 1 && v <= 18);
+  return new Set(vals).size === 18;
+}
+
 function load(){
   try{
     const raw = localStorage.getItem(STORAGE_KEY);
     if(!raw) return defaultState();
     const parsed = JSON.parse(raw);
     if(!parsed.holes || parsed.holes.length!==18 || !parsed.players) return defaultState();
+    // Strokes used to be booleans (one pop per hole, or none). They are now a
+    // count, so a match saved by an older build has to be coerced or every
+    // `true` would arithmetically read as NaN in netScore.
+    if(Array.isArray(parsed.strokes)){
+      parsed.strokes = parsed.strokes.map(row =>
+        Array.isArray(row) ? row.map(v => Number(v) || 0) : Array(18).fill(0));
+    }
+    if(!('course' in parsed)) parsed.course = null;
     return parsed;
   }catch(e){ return defaultState(); }
 }
@@ -404,7 +511,8 @@ function netScore(playerIdx, hole){
   const rec = state.holes[hole-1];
   const gross = rec.scores[playerIdx];
   if(gross==null) return null;
-  const stroke = (state.strokes[playerIdx] && state.strokes[playerIdx][hole-1]) ? 1 : 0;
+  const row = state.strokes[playerIdx];
+  const stroke = (row && Number(row[hole-1])) || 0;
   return gross - stroke;
 }
 
@@ -437,7 +545,16 @@ function sideWinner(hole){
 }
 
 // Build a thread (a bet segment) recursively, spawning auto-press child presses.
-function buildThread(start, end, threshold, label){
+//
+// `claimed` is shared across every thread in one segment's tree and holds the
+// starting holes that already have a press. It is what stops a hole from
+// spawning two presses: a parent and one of its own descendants can both sit
+// one away from the threshold and cross it on the same hole, and each would
+// otherwise open its own bet on the identical remaining holes -- the same wager
+// counted twice. A press covers "the rest of the segment", so two starting on
+// the same hole are one bet, not two. First to claim the hole keeps it.
+function buildThread(start, end, threshold, label, claimed){
+  if(!claimed) claimed = new Set();
   let diff = 0;
   let prevAbs = 0;
   const children = [];
@@ -449,8 +566,9 @@ function buildThread(start, end, threshold, label){
     if(w === 'A') diff += 1;
     else if(w === 'B') diff -= 1;
     const curAbs = Math.abs(diff);
-    if(threshold>0 && curAbs === threshold && prevAbs === threshold-1 && h < end){
-      children.push(buildThread(h+1, end, threshold, 'Press ' + (h+1) + '\u2013' + end));
+    if(threshold>0 && curAbs === threshold && prevAbs === threshold-1 && h < end && !claimed.has(h+1)){
+      claimed.add(h+1);
+      children.push(buildThread(h+1, end, threshold, 'Press ' + (h+1) + '\u2013' + end, claimed));
     }
     prevAbs = curAbs;
   }
@@ -460,9 +578,12 @@ function buildThread(start, end, threshold, label){
 
 function buildAllThreads(){
   const t = state.pressThreshold || 0;
-  const front = buildThread(1, 9, t, 'Front 9');
-  const back  = buildThread(10, 18, t, 'Back 9');
-  const overall = buildThread(1, 18, (t>0 && state.pressOnOverall) ? t : 0, 'Overall 18');
+  // A fresh claim set per segment: the front, back and overall bets are
+  // independent, so a press at hole 5 on the front must not block one at hole 5
+  // on the overall.
+  const front = buildThread(1, 9, t, 'Front 9', new Set());
+  const back  = buildThread(10, 18, t, 'Back 9', new Set());
+  const overall = buildThread(1, 18, (t>0 && state.pressOnOverall) ? t : 0, 'Overall 18', new Set());
   return { front, back, overall };
 }
 
@@ -497,6 +618,30 @@ function computePops(){
   return hcps.map(h=>Math.round(h - min));
 }
 
+// Spread `pops` strokes over 18 holes by stroke index: hardest hole first.
+// Past 18 the ranking simply wraps, so a 24-pop player gets a second stroke on
+// the six hardest holes -- which is why strokes is a count and not a flag.
+function allocateBySI(pops, si){
+  const out = Array(18).fill(0);
+  if(pops <= 0) return out;
+  const base = Math.floor(pops / 18);
+  const extra = pops % 18;
+  for(let h = 0; h < 18; h++){
+    out[h] = base + (si[h] <= extra ? 1 : 0);
+  }
+  return out;
+}
+
+// Re-derive every player's strokes from the loaded course. Called whenever the
+// course or a handicap changes, so the two can never drift apart.
+function applyCourseStrokes(){
+  if(!courseUsable(state.course)) return false;
+  const pops = computePops();
+  state.strokes = state.players.slice(0, state.numPlayers)
+    .map((p, i) => allocateBySI(pops[i], state.course.si));
+  return true;
+}
+
 function resizePlayerArrays(){
   // ensure players / strokes / holes.scores match numPlayers
   while(state.players.length < state.numPlayers){
@@ -504,7 +649,7 @@ function resizePlayerArrays(){
   }
   state.players = state.players.slice(0, state.numPlayers);
   while(state.strokes.length < state.numPlayers){
-    state.strokes.push(Array(18).fill(false));
+    state.strokes.push(Array(18).fill(0));
   }
   state.strokes = state.strokes.slice(0, state.numPlayers);
   state.holes.forEach(h=>{
@@ -521,6 +666,7 @@ function render(){
   app.innerHTML = '';
   app.appendChild(renderHeader());
   if(state.stage === 'setup'){
+    app.appendChild(renderCourseCard());
     app.appendChild(renderSetup());
   } else if(state.stage === 'strokes'){
     app.appendChild(renderStrokes());
@@ -559,6 +705,333 @@ function renderHeader(){
 
 /* ---------- Setup screen ---------- */
 
+/* ---------- Shared form helper ---------- */
+// Module scope because both the setup card and the course card build fields.
+function mkField(labelText, id, value, type='text', extra){
+  const wrap = document.createElement('label');
+  wrap.className = 'field';
+  wrap.innerHTML = '<span>'+labelText+'</span>';
+  const input = document.createElement('input');
+  input.type = type;
+  input.id = id;
+  input.value = value;
+  if(type==='number'){ input.inputMode='decimal'; }
+  if(extra) input.step = extra;
+  wrap.appendChild(input);
+  return wrap;
+}
+
+/* ---------- Course card: scan, review, reuse ---------- */
+
+// Transient UI state for the scan. Deliberately not in `state`: a half-finished
+// scan is not worth restoring across a reload, and persisting the draft would
+// let a bad read outlive the page that could fix it.
+let scanUI = { busy:false, error:'', warnings:[], draft:null, editing:false };
+
+// Netlify caps a function request at 6MB and Claude downsamples anything over
+// ~1568px anyway, so shrink before upload: smaller payload, faster round-trip,
+// no loss of anything the model would have seen.
+function fileToScaledJpeg(file, maxEdge){
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error('Could not read that file.'));
+    reader.onload = () => {
+      const img = new Image();
+      img.onerror = () => reject(new Error('That file is not an image.'));
+      img.onload = () => {
+        const scale = Math.min(1, maxEdge / Math.max(img.width, img.height));
+        const w = Math.round(img.width * scale);
+        const h = Math.round(img.height * scale);
+        const canvas = document.createElement('canvas');
+        canvas.width = w; canvas.height = h;
+        canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+        const url = canvas.toDataURL('image/jpeg', 0.85);
+        resolve(url.slice(url.indexOf(',') + 1));
+      };
+      img.src = reader.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+async function scanScorecard(file){
+  scanUI = { busy:true, error:'', warnings:[], draft:null, editing:false };
+  render();
+  try{
+    const imageBase64 = await fileToScaledJpeg(file, 1600);
+    const res = await fetch('/.netlify/functions/scan-scorecard', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ imageBase64, mediaType:'image/jpeg' })
+    });
+    const data = await res.json().catch(()=>({error:'Unreadable response from the scanner.'}));
+    if(!res.ok) throw new Error(data.error || ('Scan failed (' + res.status + ').'));
+    scanUI = {
+      busy:false, error:'',
+      warnings: data.warnings || [],
+      // Always land in the review grid, even on a clean read. The whole match
+      // hangs off these 18 numbers and a glance is cheap.
+      draft: {
+        name: data.courseName || '',
+        tee: data.teeName || '',
+        si: data.holes.map(h=>h.si),
+        par: data.holes.map(h=>h.par),
+        // Kept aside so the user can switch rows without re-scanning. Every
+        // real card tested prints both.
+        mensSi: data.holes.map(h=>h.si),
+        ladiesSi: (data.ladiesSi && data.ladiesSi.length === 18) ? data.ladiesSi : null,
+        usingLadies: false
+      },
+      editing:true
+    };
+  }catch(err){
+    scanUI = { busy:false, error: err.message || 'Scan failed.', warnings:[], draft:null, editing:false };
+  }
+  render();
+}
+
+function blankDraft(){
+  return { name:'', tee:'', si:Array(18).fill(0), par:Array(18).fill(0),
+           mensSi:null, ladiesSi:null, usingLadies:false };
+}
+
+function renderCourseCard(){
+  const card = document.createElement('div');
+  card.className = 'card';
+  card.innerHTML = '<h2>Course</h2>';
+
+  // --- Loaded course, not being edited ---
+  if(state.course && !scanUI.editing){
+    const line = document.createElement('div');
+    line.className = 'course-line';
+    const info = document.createElement('div');
+    info.style.minWidth = '0';
+    const usable = courseUsable(state.course);
+    info.innerHTML = '<div class="cl-name">' + (state.course.name || 'Unnamed course') + '</div>' +
+      '<div class="cl-meta">' + (state.course.tee ? state.course.tee + ' tees · ' : '') +
+      (usable ? 'strokes allocate automatically' : 'stroke index incomplete') + '</div>';
+    line.appendChild(info);
+    const edit = document.createElement('button');
+    edit.className = 'cl-act';
+    edit.textContent = 'Edit';
+    edit.onclick = () => {
+      scanUI.draft = { name:state.course.name, tee:state.course.tee,
+                       si:state.course.si.slice(), par:state.course.par.slice(),
+                       mensSi:null, ladiesSi:null, usingLadies:false };
+      scanUI.editing = true; scanUI.error=''; scanUI.warnings=[];
+      render();
+    };
+    line.appendChild(edit);
+    const clear = document.createElement('button');
+    clear.className = 'cl-act danger';
+    clear.textContent = 'Remove';
+    clear.onclick = () => { state.course = null; save(); render(); };
+    line.appendChild(clear);
+    card.appendChild(line);
+
+    if(!usable){
+      const warn = document.createElement('div');
+      warn.className = 'scan-warn';
+      warn.textContent = 'The stroke indexes are not a complete 1–18 set, so strokes still have to be assigned by hand. Tap Edit to fill the gaps.';
+      card.appendChild(warn);
+    }
+    return card;
+  }
+
+  // --- Review / manual edit grid ---
+  if(scanUI.editing && scanUI.draft){
+    const d = scanUI.draft;
+
+    const nameRow = document.createElement('div');
+    nameRow.className = 'row2';
+    nameRow.appendChild(mkField('Course name', 'course-name', d.name, 'text'));
+    nameRow.appendChild(mkField('Tees', 'course-tee', d.tee, 'text'));
+    card.appendChild(nameRow);
+
+    if(scanUI.warnings.length){
+      const warn = document.createElement('div');
+      warn.className = 'scan-warn';
+      warn.innerHTML = '<strong>Check these:</strong><br>' +
+        scanUI.warnings.map(w => '· ' + w).join('<br>');
+      card.appendChild(warn);
+    }
+
+    card.appendChild(document.createElement('h3')).textContent = 'Stroke index by hole';
+
+    // The card printed two handicap rows, so let the group pick which one this
+    // match plays off rather than silently assuming the men's.
+    if(d.ladiesSi){
+      const seg = document.createElement('div');
+      seg.className = 'segmented';
+      seg.style.marginBottom = '10px';
+      [['Men\u2019s', false], ['Ladies\u2019', true]].forEach(([label, ladies]) => {
+        const b = document.createElement('button');
+        b.textContent = label;
+        if(!!d.usingLadies === ladies) b.classList.add('active');
+        b.onclick = () => {
+          d.usingLadies = ladies;
+          d.si = (ladies ? d.ladiesSi : d.mensSi).slice();
+          render();
+        };
+        seg.appendChild(b);
+      });
+      card.appendChild(seg);
+    }
+
+    const inputs = [];
+    const legend = document.createElement('div');
+    legend.className = 'si-legend';
+
+    // Duplicates are the failure mode that matters: two holes claiming index 7
+    // means some other hole is missing and the allocation would be silently
+    // wrong, so flag them live rather than only at save time.
+    // Repainting in place instead of calling render() keeps the caret where the
+    // user left it -- a full re-render on each keystroke fights the cursor and
+    // makes typing a two-digit index nearly impossible.
+    function refreshSI(){
+      const counts = {};
+      d.si.forEach(v => { if(v>=1 && v<=18) counts[v] = (counts[v]||0) + 1; });
+      inputs.forEach((inp, i) => {
+        const v = d.si[i];
+        inp.classList.toggle('bad', !(v>=1 && v<=18) || counts[v] > 1);
+      });
+      const filled = d.si.filter(v=>v>=1&&v<=18);
+      const ok = new Set(filled).size === 18;
+      legend.textContent = ok
+        ? '✓ Complete — all 18 indexes present'
+        : (filled.length + ' of 18 valid · each number 1–18 used exactly once');
+      legend.style.color = ok ? 'var(--fairway)' : 'var(--flag)';
+    }
+
+    [[0,9],[9,18]].forEach(([from,to]) => {
+      const grid = document.createElement('div');
+      grid.className = 'si-grid';
+      for(let i=from;i<to;i++){
+        const cell = document.createElement('div');
+        cell.className = 'si-cell';
+        const h = document.createElement('div');
+        h.className = 'si-h';
+        h.textContent = i+1;
+        cell.appendChild(h);
+        const inp = document.createElement('input');
+        inp.type = 'number'; inp.min = '1'; inp.max = '18';
+        inp.inputMode = 'numeric';
+        inp.value = d.si[i] || '';
+        inp.oninput = () => { d.si[i] = Number(inp.value) || 0; refreshSI(); };
+        inputs[i] = inp;
+        cell.appendChild(inp);
+        grid.appendChild(cell);
+      }
+      card.appendChild(grid);
+    });
+
+    card.appendChild(legend);
+    refreshSI();
+
+    const saveBtn = document.createElement('button');
+    saveBtn.className = 'btn-primary';
+    saveBtn.textContent = 'Use this course';
+    saveBtn.onclick = () => {
+      const nameEl = document.getElementById('course-name');
+      const teeEl = document.getElementById('course-tee');
+      const course = {
+        name: (nameEl && nameEl.value.trim()) || 'Unnamed course',
+        tee: (teeEl && teeEl.value.trim()) || '',
+        si: d.si.slice(),
+        par: d.par.slice()
+      };
+      state.course = course;
+      rememberCourse(course);
+      applyCourseStrokes();
+      scanUI = { busy:false, error:'', warnings:[], draft:null, editing:false };
+      save(); render();
+    };
+    card.appendChild(saveBtn);
+
+    const cancel = document.createElement('button');
+    cancel.className = 'btn-secondary';
+    cancel.textContent = 'Cancel';
+    cancel.onclick = () => {
+      scanUI = { busy:false, error:'', warnings:[], draft:null, editing:false };
+      render();
+    };
+    card.appendChild(cancel);
+    return card;
+  }
+
+  // --- Nothing loaded: pick a saved course, or scan ---
+  const saved = loadCourses();
+  if(saved.length){
+    card.appendChild(document.createElement('h3')).textContent = 'Saved courses';
+    saved.forEach(c => {
+      const line = document.createElement('div');
+      line.className = 'course-line';
+      const info = document.createElement('div');
+      info.style.minWidth = '0';
+      info.innerHTML = '<div class="cl-name">' + c.name + '</div>' +
+        '<div class="cl-meta">' + (c.tee ? c.tee + ' tees' : 'no tee noted') + '</div>';
+      line.appendChild(info);
+      const use = document.createElement('button');
+      use.className = 'cl-act';
+      use.textContent = 'Use';
+      use.onclick = () => {
+        state.course = { name:c.name, tee:c.tee, si:c.si.slice(), par:c.par.slice() };
+        applyCourseStrokes();
+        save(); render();
+      };
+      line.appendChild(use);
+      const del = document.createElement('button');
+      del.className = 'cl-act danger';
+      del.textContent = '×';
+      del.onclick = () => { forgetCourse(courseKey(c)); render(); };
+      line.appendChild(del);
+      card.appendChild(line);
+    });
+  }
+
+  card.appendChild(document.createElement('h3')).textContent =
+    saved.length ? 'Add another' : 'Load a course';
+
+  const fileInput = document.createElement('input');
+  fileInput.type = 'file';
+  fileInput.accept = 'image/*';
+  // Opens the camera directly on a phone, which is where this gets used.
+  fileInput.capture = 'environment';
+  fileInput.style.display = 'none';
+  fileInput.onchange = () => { if(fileInput.files[0]) scanScorecard(fileInput.files[0]); };
+  card.appendChild(fileInput);
+
+  const row = document.createElement('div');
+  row.className = 'scan-row';
+
+  const scanBtn = document.createElement('button');
+  scanBtn.className = 'scan-btn';
+  scanBtn.disabled = scanUI.busy;
+  scanBtn.textContent = scanUI.busy ? 'Reading card…' : '📷 Scan scorecard';
+  scanBtn.onclick = () => fileInput.click();
+  row.appendChild(scanBtn);
+
+  const manualBtn = document.createElement('button');
+  manualBtn.className = 'scan-btn';
+  manualBtn.disabled = scanUI.busy;
+  manualBtn.textContent = 'Enter by hand';
+  manualBtn.onclick = () => {
+    scanUI = { busy:false, error:'', warnings:[], draft:blankDraft(), editing:true };
+    render();
+  };
+  row.appendChild(manualBtn);
+  card.appendChild(row);
+
+  const note = document.createElement('div');
+  note.className = 'scan-note' + (scanUI.error ? ' err' : '');
+  note.textContent = scanUI.error
+    ? scanUI.error
+    : 'Photograph the scorecard so the handicap row is readable. The course is saved on this device for next time. Without a course, strokes are assigned by hand.';
+  card.appendChild(note);
+
+  return card;
+}
+
 function renderSetup(){
   const card = document.createElement('div');
   card.className = 'card';
@@ -579,20 +1052,6 @@ function renderSetup(){
     seg.appendChild(b);
   });
   card.appendChild(seg);
-
-  const mkField = (labelText, id, value, type='text', extra) => {
-    const wrap = document.createElement('label');
-    wrap.className = 'field';
-    wrap.innerHTML = '<span>'+labelText+'</span>';
-    const input = document.createElement('input');
-    input.type = type;
-    input.id = id;
-    input.value = value;
-    if(type==='number'){ input.inputMode='decimal'; }
-    if(extra) input.step = extra;
-    wrap.appendChild(input);
-    return wrap;
-  };
 
   if(state.numPlayers===2){
     const row2 = document.createElement('div');
@@ -710,7 +1169,10 @@ function renderSetup(){
 
     const pops = computePops();
     const anyPops = pops.some(p=>p>0);
-    state.stage = anyPops ? 'strokes' : 'match';
+    // With a scanned card the allocation is decided, not guessed, so the manual
+    // assign-strokes step has nothing left to ask and is skipped.
+    const auto = applyCourseStrokes();
+    state.stage = (anyPops && !auto) ? 'strokes' : 'match';
     save(); render();
   };
   card.appendChild(btn);
@@ -728,7 +1190,9 @@ function renderStrokes(){
   const explain = document.createElement('div');
   explain.className = 'checkline';
   explain.style.marginBottom = '14px';
-  explain.innerHTML = 'The low handicap plays scratch. Since the course isn\u2019t loaded, tap the holes where each player below gets a stroke \u2014 use whatever the group\u2019s stroke index says, or just spread them out.';
+  explain.innerHTML = state.course
+    ? 'The low handicap plays scratch. \u201c' + (state.course.name || 'This course') + '\u201d is loaded but its stroke index is incomplete, so tap the holes where each player gets a stroke. Fill in the missing indexes under Course and this becomes automatic.'
+    : 'The low handicap plays scratch. Since no course is loaded, tap the holes where each player below gets a stroke \u2014 use whatever the group\u2019s stroke index says, or just spread them out. Scan a scorecard on the setup screen to have this filled in for you.';
   card.appendChild(explain);
 
   state.players.forEach((p, idx) => {
@@ -739,7 +1203,7 @@ function renderStrokes(){
 
     const head = document.createElement('div');
     head.className = 'sp-head';
-    const assigned = state.strokes[idx].filter(Boolean).length;
+    const assigned = state.strokes[idx].reduce((a,v)=>a+(Number(v)||0), 0);
     head.innerHTML = '<span class="sp-name">'+p.name+'</span>'+
       '<span class="sp-count '+(assigned===pop?'match':'')+'">'+assigned+' / '+pop+' pops assigned</span>';
     block.appendChild(head);
@@ -748,8 +1212,9 @@ function renderStrokes(){
     autoBtn.className = 'autofill';
     autoBtn.textContent = 'Auto-fill holes 1\u2013' + pop;
     autoBtn.onclick = () => {
-      state.strokes[idx] = Array(18).fill(false);
-      for(let h=0; h<pop; h++) state.strokes[idx][h] = true;
+      state.strokes[idx] = courseUsable(state.course)
+        ? allocateBySI(pop, state.course.si)
+        : Array.from({length:18}, (_, h) => h < pop ? 1 : 0);
       save(); render();
     };
     block.appendChild(autoBtn);
@@ -789,11 +1254,14 @@ function renderStrokes(){
 }
 
 function holeToggle(playerIdx, hole){
+  const n = Number(state.strokes[playerIdx][hole-1]) || 0;
   const d = document.createElement('div');
-  d.className = 'htg' + (state.strokes[playerIdx][hole-1] ? ' on' : '');
-  d.textContent = hole;
+  d.className = 'htg' + (n >= 1 ? ' on' : '') + (n >= 2 ? ' on2' : '');
+  // A player more than 18 shots off the low ball gets two on the hardest holes,
+  // so the toggle cycles rather than flips.
+  d.textContent = n >= 2 ? hole + '\u00d72' : hole;
   d.onclick = () => {
-    state.strokes[playerIdx][hole-1] = !state.strokes[playerIdx][hole-1];
+    state.strokes[playerIdx][hole-1] = (n + 1) % 3;
     save(); render();
   };
   return d;
@@ -856,7 +1324,16 @@ function renderHoleEntry(){
 
   const title = document.createElement('div');
   title.className = 'hole-title';
-  title.innerHTML = 'Hole ' + hole + '<small>' + (hole<=9 ? 'Front 9' : 'Back 9') + '</small>';
+  // Par and stroke index come along for free once a card is loaded, and they
+  // are exactly what you want to see standing on the tee.
+  const bits = [hole<=9 ? 'Front 9' : 'Back 9'];
+  if(state.course){
+    const par = state.course.par[hole-1];
+    const si = state.course.si[hole-1];
+    if(par >= 3) bits.push('Par ' + par);
+    if(si >= 1 && si <= 18) bits.push('S.I. ' + si);
+  }
+  title.innerHTML = 'Hole ' + hole + '<small>' + bits.join(' \u00b7 ') + '</small>';
 
   const nextBtn = document.createElement('button');
   nextBtn.textContent = '\u203a';
@@ -947,7 +1424,7 @@ function scoreBox(playerIdx, hole){
   if(hasPop && rec.scores[playerIdx]!=null){
     const net = document.createElement('div');
     net.className = 'net-line';
-    net.textContent = 'net ' + (rec.scores[playerIdx]-1);
+    net.textContent = 'net ' + netScore(playerIdx, hole);
     box.appendChild(net);
   }
   return box;

@@ -1,1 +1,23 @@
 .DS_Store
+
+# Build output and installed deps — Netlify rebuilds both.
+node_modules/
+dist/
+package-lock.json
+
+# Machine-specific Claude Code state — everything else under .claude/ is
+# committed and stripped from the deploy by netlify.toml.
+.claude/settings.local.json
+.claude/shell-snapshots/
+.claude/todos/
+
+# Scorecard photos and screenshots kept for testing. Root-level only, so a real
+# site asset under assets/ or img/ still gets committed normally.
+/*.jpg
+/*.jpeg
+/*.JPG
+/*.JPEG
+/*.png
+/*.PNG
+/*.heic
+/*.HEIC

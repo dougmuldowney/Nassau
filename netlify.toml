@@ -1,0 +1,28 @@
+[build]
+  # An allowlist, not a denylist. The site used to publish the repo root and
+  # strip what shouldn't ship, but adding a function brought node_modules and
+  # the function source into the repo -- and with publish = ".", anything not
+  # stripped is a live URL. Copying the site into dist/ inverts that: a new
+  # file is private until it is named here, rather than public until it is
+  # remembered. Add new pages and assets to this line.
+  command = "rm -rf dist && mkdir -p dist && cp index.html dist/"
+  publish = "dist"
+  functions = "netlify/functions"
+
+  # Skip the deploy when a push touches only source files. Netlify cancels the
+  # build when this exits 0.
+  #
+  # The rev-parse guard is required, not defensive noise: CACHED_COMMIT_REF is
+  # empty on a first build or cleared cache, and because it is unquoted it would
+  # vanish from the command line, leaving `git diff --quiet HEAD -- ...`, which
+  # compares against a clean checkout, exits 0, and silently skips a deploy that
+  # needed to run. rev-parse also catches a stale ref after a force-push. Both
+  # cases exit non-zero here and fall through to deploying.
+  ignore = "git rev-parse --verify $CACHED_COMMIT_REF >/dev/null 2>&1 && git diff --quiet $CACHED_COMMIT_REF $COMMIT_REF -- . ':(exclude).claude' ':(exclude)docs' ':(exclude)scripts' ':(exclude)*.md'"
+
+# No timeout setting here on purpose: Netlify's synchronous function limit is a
+# fixed 60s and is not configurable, so an earlier `timeout = 60` in this block
+# was a no-op at best. 60s is comfortably above what a scorecard read takes.
+# If a scan ever does hit the ceiling, the lever is memory, not time:
+#   [functions."scan-scorecard"]
+#     memory = "2gb"
