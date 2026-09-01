@@ -62,8 +62,20 @@ function clean(course) {
 const keyOf = (c) =>
   ((c.name || "").trim() + "|" + (c.tee || "").trim()).toLowerCase();
 
+// getWithMetadata resolves to null -- not a rejection, and not an empty object --
+// when the key has never been written. Destructuring that directly threw a 500
+// on every read of an empty store, so the first write could never happen and the
+// blob could never come into existence. Read the fields off a possibly-null
+// value instead, and treat "missing" as an empty list.
 async function readAll(store) {
-  const { data, etag } = await store.getWithMetadata(KEY, READ).catch(() => ({}));
+  let entry = null;
+  try {
+    entry = await store.getWithMetadata(KEY, READ);
+  } catch {
+    entry = null;
+  }
+  const data = entry ? entry.data : null;
+  const etag = entry ? entry.etag : null;
   const courses = data && Array.isArray(data.courses) ? data.courses : [];
   return { courses, etag };
 }
