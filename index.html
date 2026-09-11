@@ -669,20 +669,24 @@ function sideWinner(hole){
   return 'H';
 }
 
-// Build a thread (a bet segment) recursively, spawning auto-press child presses.
+// Build a bet segment, and the one press that can be opened against it.
 //
-// `claimed` is shared across every thread in one segment's tree and holds the
-// starting holes that already have a press. It is what stops a hole from
-// spawning two presses: a parent and one of its own descendants can both sit
-// one away from the threshold and cross it on the same hole, and each would
-// otherwise open its own bet on the identical remaining holes -- the same wager
-// counted twice. A press covers "the rest of the segment", so two starting on
-// the same hole are one bet, not two. First to claim the hole keeps it.
-function buildThread(start, end, threshold, label, claimed){
-  if(!claimed) claimed = new Set();
+// A bet gets pressed at most once. Once the main match has a press running,
+// falling back to level and going two clear again does not open a second press
+// against the main match -- the next press is against the press. So the presses
+// form a chain, each one answering the bet directly above it, rather than a
+// parent sprouting a new press every time the score swings back through the
+// threshold.
+//
+// This is why `children` holds at most one entry. It stays an array so the
+// render and settle paths can keep walking the structure unchanged, and because
+// the chain is arbitrarily deep: a press can be pressed, and that press pressed
+// in turn. Each link starts later than the one above it, so no two presses can
+// ever cover the same holes.
+function buildThread(start, end, threshold, label){
   let diff = 0;
   let prevAbs = 0;
-  const children = [];
+  let child = null;
   let playedTo = start - 1;
   for(let h = start; h <= end; h++){
     const w = sideWinner(h);
@@ -691,24 +695,23 @@ function buildThread(start, end, threshold, label, claimed){
     if(w === 'A') diff += 1;
     else if(w === 'B') diff -= 1;
     const curAbs = Math.abs(diff);
-    if(threshold>0 && curAbs === threshold && prevAbs === threshold-1 && h < end && !claimed.has(h+1)){
-      claimed.add(h+1);
-      children.push(buildThread(h+1, end, threshold, 'Press ' + (h+1) + '\u2013' + end, claimed));
+    // `!child` is the whole rule: first crossing only, for this bet.
+    if(!child && threshold>0 && curAbs === threshold && prevAbs === threshold-1 && h < end){
+      child = buildThread(h+1, end, threshold, 'Press ' + (h+1) + '\u2013' + end);
     }
     prevAbs = curAbs;
   }
   const complete = playedTo === end;
-  return { start, end, label, diff, playedTo, complete, children };
+  return { start, end, label, diff, playedTo, complete, children: child ? [child] : [] };
 }
 
 function buildAllThreads(){
   const t = state.pressThreshold || 0;
-  // A fresh claim set per segment: the front, back and overall bets are
-  // independent, so a press at hole 5 on the front must not block one at hole 5
-  // on the overall.
-  const front = buildThread(1, 9, t, 'Front 9', new Set());
-  const back  = buildThread(10, 18, t, 'Back 9', new Set());
-  const overall = buildThread(1, 18, (t>0 && state.pressOnOverall) ? t : 0, 'Overall 18', new Set());
+  // The front, back and overall bets are independent wagers, so each runs its
+  // own press chain.
+  const front = buildThread(1, 9, t, 'Front 9');
+  const back  = buildThread(10, 18, t, 'Back 9');
+  const overall = buildThread(1, 18, (t>0 && state.pressOnOverall) ? t : 0, 'Overall 18');
   return { front, back, overall };
 }
 
