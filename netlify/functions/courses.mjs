@@ -35,8 +35,6 @@ function validate(course) {
   const name = typeof course.name === "string" ? course.name.trim() : "";
   if (!name) return "Course name is required.";
   if (name.length > MAX_NAME) return `Course name must be ${MAX_NAME} characters or fewer.`;
-  if (course.tee != null && typeof course.tee !== "string") return "Tee must be a string.";
-  if ((course.tee || "").length > MAX_NAME) return "Tee name is too long.";
   if (!isPermutation(course.si)) return "Stroke index must be the numbers 1-18, each exactly once.";
   if (!Array.isArray(course.par) || course.par.length !== 18) return "Par must have 18 values.";
   if (!course.par.every((v) => Number.isInteger(v) && v >= 0 && v <= 8)) return "Par values are out of range.";
@@ -48,7 +46,6 @@ function validate(course) {
 function clean(course) {
   return {
     name: course.name.trim(),
-    tee: (course.tee || "").trim(),
     si: course.si.map(Number),
     par: course.par.map(Number),
     ladiesSi: course.ladiesSi ? course.ladiesSi.map(Number) : null,
@@ -56,11 +53,10 @@ function clean(course) {
   };
 }
 
-// Must match courseKey() in index.html exactly. Each part is trimmed on its own:
-// trimming only the joined string leaves inner whitespace on the name, which
-// would file " Plateau Club " as a separate course from "Plateau Club".
-const keyOf = (c) =>
-  ((c.name || "").trim() + "|" + (c.tee || "").trim()).toLowerCase();
+// Must match courseKey() in index.html exactly. The tee is not part of it:
+// stroke index is a property of the course, not of where you tee off, so
+// keying on it would file one course as several.
+const keyOf = (c) => (c.name || "").trim().toLowerCase();
 
 // getWithMetadata resolves to null -- not a rejection, and not an empty object --
 // when the key has never been written. Destructuring that directly threw a 500

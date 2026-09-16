@@ -12,11 +12,6 @@ const SCHEMA = {
       type: "string",
       description: "Course name as printed. Empty string if not visible."
     },
-    teeName: {
-      type: "string",
-      description:
-        "Tee box the par/yardage row belongs to (e.g. 'Blue', 'White'). Empty string if not determinable."
-    },
     holes: {
       type: "array",
       description:
@@ -49,7 +44,7 @@ const SCHEMA = {
       items: { type: "string" }
     }
   },
-  required: ["courseName", "teeName", "holes", "ladiesSi", "warnings"],
+  required: ["courseName", "holes", "ladiesSi", "warnings"],
   additionalProperties: false
 };
 
@@ -145,7 +140,7 @@ export default async (req) => {
             {
               type: "text",
               text:
-                "Extract the course name, the tee, and the par and stroke index for all 18 holes from this scorecard."
+                "Extract the course name and the par and stroke index for all 18 holes from this scorecard."
             }
           ]
         }
@@ -202,7 +197,6 @@ export default async (req) => {
 
     return Response.json({
       courseName: data.courseName || "",
-      teeName: data.teeName || "",
       holes,
       ladiesSi,
       siComplete,

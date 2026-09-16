@@ -426,7 +426,7 @@ function defaultState(){
     pressThreshold: 2, // 0 = off, else N-down triggers a press
     pressOnOverall:false,
     strokes: [ Array(18).fill(0), Array(18).fill(0) ], // per player, per hole: strokes received (0,1,2)
-    course: null, // {name, tee, si:[18], par:[18]} once a scorecard is loaded
+    course: null, // {name, si:[18], par:[18], ladiesSi} once a scorecard is loaded
     holes: Array.from({length:18}, ()=>({scores:[null,null]})),
     currentHole:1
   };
@@ -446,13 +446,13 @@ let state = load();
 // on one nine. See docs/scorecard-fixtures.md.
 const BUILTIN_COURSES = [
   {
-    name: 'Chambers Bay', tee: '',
+    name: 'Chambers Bay',
     par:      [4,4,3,5,4,4,4,5,3, 4,4,4,5,4,3,4,3,5],
     si:       [3,15,17,11,7,9,1,5,13, 10,2,16,4,8,18,12,14,6],
     ladiesSi: [11,9,17,5,7,13,1,3,15, 8,2,14,6,10,18,12,16,4]
   },
   {
-    name: 'Plateau Club', tee: '',
+    name: 'Plateau Club',
     par:      [4,5,3,4,4,3,4,5,4, 5,4,4,3,4,4,3,4,5],
     si:       [11,3,13,17,5,15,1,9,7, 8,16,4,18,10,2,14,12,6],
     ladiesSi: [11,3,15,17,9,13,1,5,7, 2,14,4,16,10,8,18,12,6]
@@ -473,18 +473,29 @@ function saveCourses(list){
 }
 // Must stay byte-identical in behaviour to keyOf() in the courses function:
 // the server uses it to decide update-vs-insert and to find the row to delete.
-// Each part is trimmed separately -- trimming only the joined string leaves
-// inner whitespace on the name and would file " Plateau Club " as a new course.
+// The tee is deliberately not part of this. Stroke index is a property of the
+// course, not of where you tee off, so keying on it would file one course as
+// several -- identical data duplicated across the shared list.
 function courseKey(c){
-  return ((c.name||'').trim() + '|' + (c.tee||'').trim()).toLowerCase();
+  return (c.name||'').trim().toLowerCase();
 }
 // What the picker shows, in one precedence order: a course you edited yourself
 // shadows the shared copy, which shadows the built-in. Kept separate from
 // loadCourses() so saving or deleting only ever touches your own list -- a
 // built-in or a shared course must not land in localStorage just by being shown.
 function allCourses(){
-  const mine = loadCourses();
-  const taken = new Set(mine.map(courseKey));
+  // Dedupe your own list before anything else. Courses saved by an older build
+  // carried a tee and were keyed on it, so "Sahalee / Blue" and "Sahalee /
+  // White" are two stored rows that now share one key -- the same course, listed
+  // twice. Newest wins.
+  const byKey = new Map();
+  loadCourses().forEach(c => {
+    const k = courseKey(c);
+    const prev = byKey.get(k);
+    if(!prev || (c.savedAt || 0) >= (prev.savedAt || 0)) byKey.set(k, c);
+  });
+  const mine = [...byKey.values()];
+  const taken = new Set(byKey.keys());
   const shared = loadSharedCache()
     .filter(c => !taken.has(courseKey(c)))
     .map(c => Object.assign({}, c, {shared:true}));
@@ -499,7 +510,7 @@ function rememberCourse(course){
   const list = loadCourses();
   const key = courseKey(course);
   const at = list.findIndex(c => courseKey(c) === key);
-  const entry = { name:course.name, tee:course.tee, si:course.si.slice(), par:course.par.slice(),
+  const entry = { name:course.name, si:course.si.slice(), par:course.par.slice(),
                   ladiesSi: course.ladiesSi ? course.ladiesSi.slice() : null, savedAt: Date.now() };
   if(at >= 0) list[at] = entry; else list.push(entry);
   list.sort((a,b)=> (a.name||'').localeCompare(b.name||''));
@@ -930,7 +941,6 @@ async function scanScorecard(file){
       // hangs off these 18 numbers and a glance is cheap.
       draft: {
         name: data.courseName || '',
-        tee: data.teeName || '',
         si: data.holes.map(h=>h.si),
         par: data.holes.map(h=>h.par),
         // Kept aside so the user can switch rows without re-scanning. Every
@@ -948,7 +958,7 @@ async function scanScorecard(file){
 }
 
 function blankDraft(){
-  return { name:'', tee:'', si:Array(18).fill(0), par:Array(18).fill(0),
+  return { name:'', si:Array(18).fill(0), par:Array(18).fill(0),
            mensSi:null, ladiesSi:null, usingLadies:false };
 }
 
@@ -965,14 +975,14 @@ function renderCourseCard(){
     info.style.minWidth = '0';
     const usable = courseUsable(state.course);
     info.innerHTML = '<div class="cl-name">' + (state.course.name || 'Unnamed course') + '</div>' +
-      '<div class="cl-meta">' + (state.course.tee ? state.course.tee + ' tees · ' : '') +
+      '<div class="cl-meta">' +
       (usable ? 'strokes allocate automatically' : 'stroke index incomplete') + '</div>';
     line.appendChild(info);
     const edit = document.createElement('button');
     edit.className = 'cl-act';
     edit.textContent = 'Edit';
     edit.onclick = () => {
-      scanUI.draft = { name:state.course.name, tee:state.course.tee,
+      scanUI.draft = { name:state.course.name,
                        si:state.course.si.slice(), par:state.course.par.slice(),
                        // Only offer the row switch when the second row is known;
                        // mensSi is the row as stored, whichever it is.
@@ -1020,11 +1030,9 @@ function renderCourseCard(){
   if(scanUI.editing && scanUI.draft){
     const d = scanUI.draft;
 
-    const nameRow = document.createElement('div');
-    nameRow.className = 'row2';
-    nameRow.appendChild(mkField('Course name', 'course-name', d.name, 'text'));
-    nameRow.appendChild(mkField('Tees', 'course-tee', d.tee, 'text'));
-    card.appendChild(nameRow);
+    // No tee field: par and stroke index are the same from every tee box, so
+    // asking for it would only add a way to file one course as two.
+    card.appendChild(mkField('Course name', 'course-name', d.name, 'text'));
 
     if(scanUI.warnings.length){
       const warn = document.createElement('div');
@@ -1111,10 +1119,8 @@ function renderCourseCard(){
     saveBtn.textContent = 'Use this course';
     saveBtn.onclick = () => {
       const nameEl = document.getElementById('course-name');
-      const teeEl = document.getElementById('course-tee');
       const course = {
         name: (nameEl && nameEl.value.trim()) || 'Unnamed course',
-        tee: (teeEl && teeEl.value.trim()) || '',
         si: d.si.slice(),
         par: d.par.slice(),
         // Keep the row not in use so it can be switched to later without a
@@ -1165,8 +1171,7 @@ function renderCourseCard(){
       if(!list.length) return;
       const g = document.createElement('optgroup');
       g.label = label;
-      list.forEach(c => g.appendChild(new Option(
-        c.name + (c.tee ? ' — ' + c.tee : ''), courseKey(c))));
+      list.forEach(c => g.appendChild(new Option(c.name, courseKey(c))));
       sel.appendChild(g);
     };
     group('Built in', courses.filter(c => c.builtin));
@@ -1176,7 +1181,7 @@ function renderCourseCard(){
     sel.onchange = () => {
       const c = courses.find(x => courseKey(x) === sel.value);
       if(!c) return;
-      state.course = { name:c.name, tee:c.tee, si:c.si.slice(), par:c.par.slice(),
+      state.course = { name:c.name, si:c.si.slice(), par:c.par.slice(),
                        ladiesSi: c.ladiesSi ? c.ladiesSi.slice() : null };
       applyCourseStrokes();
       save(); render();
